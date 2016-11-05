@@ -20,12 +20,20 @@ public class Configuracao {
 	private ClassLoader classLoader;
 
 	private static final Logger logger = LoggerFactory.getLogger(Configuracao.class);
+	
+	private static final String filenameDefault = "config.properties";
 
 	public Configuracao() {
+		this.filename = filenameDefault;
 		this.properties = new Properties();
-		this.filename = "config.properties";
 		this.classLoader = this.getClass().getClassLoader();
 		this.carregarResource();
+	}
+	
+	public Configuracao(String filename) {
+		this.filename = filename;
+		this.properties = new Properties();
+		this.classLoader = this.getClass().getClassLoader();
 	}
 
 	public Configuracao salvar() {
@@ -39,21 +47,19 @@ public class Configuracao {
 	}
 
 	public Configuracao carregarResource() {
-		try (InputStream input = this.classLoader.getResourceAsStream(this.filename)) {
-			// load properties file
-			this.properties.load(input);
-		} catch (IOException e) {
-			logger.error(String.format("Erro ao carregar %s", this.filename), e);
-		}
-		return this;
+		return carregar(this.classLoader.getResource(this.filename).getPath());
 	}
 
 	public Configuracao carregar() {
-		try (InputStream input = new FileInputStream(this.filename)) {
+		return carregar(this.filename);
+	}
+	
+	private Configuracao carregar(String filenamePath) {
+		try (InputStream input = new FileInputStream(filenamePath)) {
 			// load properties file
 			this.properties.load(input);
 		} catch (IOException e) {
-			logger.warn(String.format("Erro ao carregar %s", this.filename), e);
+			logger.warn(String.format("Erro ao carregar %s", filenamePath), e);
 		}
 		return this;
 	}

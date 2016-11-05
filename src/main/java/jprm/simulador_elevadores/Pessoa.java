@@ -108,7 +108,7 @@ public class Pessoa {
 
 	@Override
 	public String toString() {
-		return "Pessoa [nome=" + nome + ", andar=" + andar + ", instanteChegada=" + instanteChegada
+		return "\n Pessoa [nome=" + nome + ", andar=" + andar + ", instanteChegada=" + instanteChegada
 				+ ", instanteEmbarque=" + instanteEmbarque + ", instanteDembarque=" + instanteDembarque + "]";
 	}
 
