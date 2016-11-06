@@ -20,9 +20,7 @@ public class App {
 		String conf = config.get("conf", "opcaoDefault");
 		logger.info(String.format("Configuração carregada: conf=%s", conf));
 		
-		
-		PessoaLoader loader = new PessoaLoader();
-		List<Pessoa> listaPessoas = loader.getListaPessoasResource();
+		List<Pessoa> listaPessoas = (new PessoaLoader()).getListaPessoasResource();
 		
 		logger.info(String.format("listaPesoas=%s", listaPessoas));
 	}
