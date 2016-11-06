@@ -24,7 +24,7 @@ public class PessoaLoader {
 
 	private DateTimeFormatter dateTimeFormat;
 
-	private static final Logger logger = LoggerFactory.getLogger(Configuracao.class);
+	private static final Logger logger = LoggerFactory.getLogger(PessoaLoader.class);
 
 	private static final String filenameDefault = "elevadores.csv";
 
