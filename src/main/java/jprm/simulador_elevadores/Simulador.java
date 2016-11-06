@@ -6,8 +6,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Simulador {
+
+	private static final Logger logger = LoggerFactory.getLogger(Simulador.class);
 
 	/**
 	 * Parâmetros da simulação
@@ -17,6 +23,7 @@ public class Simulador {
 	private LocalDateTime instanteFinal;
 	private List<Pessoa> listaPessoasRestantes;
 	private List<Elevador> listaElevadores;
+	private ElevadorControle elevadorControle;
 
 	private Integer quantidadeElevadores;
 	private Duration periodoParadaElevador;
@@ -79,6 +86,8 @@ public class Simulador {
 			e.setStatus(ElevadorStatus.ESPERA_TERREO);
 			this.listaElevadores.add(e);
 		}
+		
+		this.elevadorControle.inicializar(this.listaElevadores);
 	}
 
 	public void incrementarInstanteAtual() {
@@ -97,16 +106,41 @@ public class Simulador {
 		this.listaElevadores.forEach(e -> e.atualizar(this.instanteAtual));
 
 		// se o elevador estiver parado, verifica se há pessoas para desembarque
+		for (Elevador e : this.listaElevadores) {
+			e.getLotacao().stream().filter(p -> p.getAndar() == e.getAndarAtual()).forEach(p -> {
+				p.setInstanteDembarque(this.instanteAtual);
+				e.getLotacao().remove(p);
+				registrarDesembarque(p);
+			});
+		}
 
 		// pegar pessoas para processamento (instante atual = instante de
 		// chegada)
+		List<Pessoa> pessoasChegaram = this.listaPessoasRestantes.stream()
+				.filter(p -> p.getInstanteChegada().isEqual(this.instanteAtual)).collect(Collectors.toList());
+
+		this.listaPessoasRestantes.removeAll(pessoasChegaram);
 
 		// para cada pessoa para o controlador decidirá qual elevador pegar
+		pessoasChegaram.forEach(p -> this.elevadorControle.decisao(p).getFilaTerreo().add(p));
 
 		// se o elevador estiver em espera no andar minimo, verifica se há
 		// pessoas para embarque, se o elevador estiver no andar minimo mas o
 		// status for parado_subindo considera-se que o elevador não está mais
 		// disponível para embarque de pessoas na fila que acabaram de chegar
+		this.listaElevadores.stream().filter(e -> e.getStatus() == ElevadorStatus.ESPERA_TERREO).forEach(e -> {
+			List<Pessoa> pessoasFila = e.getFilaTerreo();
+			if (!pessoasFila.isEmpty()) {
+				e.setStatus(ElevadorStatus.PARADO_SUBIR);
+			}
+			List<Pessoa> lotacao = e.getLotacao();
+			for (Pessoa p : pessoasFila) {
+				if (lotacao.size() <= this.getLotacaoMaximaElevador()) {
+					lotacao.add(p);
+					pessoasFila.remove(p);
+				}
+			}
+		});
 
 		// condição: se lista de pessoas vazia, finalizar simulação
 		if (this.listaPessoasRestantes.isEmpty()) {
@@ -117,13 +151,18 @@ public class Simulador {
 		}
 	}
 
-	public Simulador() {
+	public void registrarDesembarque(Pessoa p) {
+		logger.info(String.format("%s %n Elevadores: %s", p, this.listaElevadores));
+	}
+
+	public Simulador(ElevadorControle elevadorControle) {
 		this.quantidadeElevadores = quantidadeElevadoresDefault;
 		this.periodoParadaElevador = periodoParadaElevadorDefault;
 		this.periodoEntreAndaresElevador = periodoEntreAndaresElevadorDefault;
 		this.lotacaoMaximaElevador = lotacaoMaximaElevadorDefault;
 		this.andarMinimoElevador = andarMinimoElevadorDefault;
 		this.andarMaximoElevador = andarMaximoElevadorDefault;
+		this.elevadorControle = elevadorControle;
 	}
 
 	public LocalDateTime getInstanteInicial() {
