@@ -23,6 +23,86 @@ public class Elevador {
 	private Duration periodoParada;
 
 	/**
+	 * Atualiza posição e status do elevador
+	 * 
+	 * @param instanteAtual
+	 */
+	public void atualizar(LocalDateTime instanteAtual) {
+		switch (this.status) {
+		case PARADO_SUBIR:
+			if (periodoFinalizado(instanteAtual, this.periodoParada)) {
+				this.status = ElevadorStatus.SUBINDO;
+			}
+			break;
+
+		case PARADO_DESCER:
+			if (periodoFinalizado(instanteAtual, this.periodoParada)) {
+				this.status = ElevadorStatus.DESCENDO;
+			}
+			break;
+
+		case SUBINDO:
+			if (periodoFinalizado(instanteAtual, this.periodoEntreAndares)) {
+				this.andarAtual += 1;
+				if (this.andarAtual > this.andarMaximo) {
+					throw new RuntimeException("O andar atual (" + this.andarAtual + ") é maior que o andar máximo ("
+							+ this.andarMaximo + ")");
+				}
+				atualizarStatusSubindo();
+			}
+			break;
+
+		case DESCENDO:
+			if (periodoFinalizado(instanteAtual, this.periodoEntreAndares)) {
+				this.andarAtual -= 1;
+				if (this.andarAtual < this.andarMinimo) {
+					throw new RuntimeException("O andar atual (" + this.andarAtual + ") é menor que o andar mínimo ("
+							+ this.andarMinimo + ")");
+				}
+				atualizarStatusDescendo();
+			}
+			break;
+
+		case ESPERA_TERREO:
+		default:
+			// nenhuma ação a ser tomada
+			break;
+		}
+	}
+
+	/**
+	 * retorna true se o periodo calculado é maior ou igual ao periodo
+	 * pre-definido
+	 * 
+	 * @param instanteAtual
+	 * @param periodoComparacao
+	 * @return
+	 */
+	private Boolean periodoFinalizado(LocalDateTime instanteAtual, Duration periodoComparacao) {
+		return Duration.between(this.marcadorTemporal, instanteAtual).compareTo(periodoComparacao) >= 0;
+	}
+
+	private void atualizarStatusSubindo() {
+		List<Integer> paradas = getParadasLotacao();
+		if (paradas.contains(this.andarAtual)) {
+			// o andar atual é uma parada programada
+			if (paradas.size() == 1) {
+				// o andar atual é a última parada
+				this.status = ElevadorStatus.PARADO_DESCER;
+			} else {
+				this.status = ElevadorStatus.PARADO_SUBIR;
+			}
+		}
+	}
+
+	private void atualizarStatusDescendo() {
+		// considerando que o elevador desce vazio para o andarMinimo
+		if (this.andarAtual == this.andarMinimo) {
+			this.status = ElevadorStatus.ESPERA_TERREO;
+		}
+	}
+
+	/**
 	 * Calcula o tempo restante para o elevador chegar ao Andar Mínimo
 	 * 
 	 * @param instanteAtual
@@ -173,7 +253,7 @@ public class Elevador {
 		this.lotacao = new ArrayList<>(this.lotacaoMaxima);
 		this.filaTerreo = new LinkedList<>();
 	}
-	
+
 	/**
 	 * Contrutor Minimo
 	 * 
