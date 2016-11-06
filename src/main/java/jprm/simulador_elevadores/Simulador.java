@@ -85,8 +85,36 @@ public class Simulador {
 		this.instanteAtual = this.instanteAtual.plusSeconds(passoSimulacaoSegundosDefault);
 	}
 
-	public void processarInstante() {
+	public SimulacaoStatus processarInstante() {
+		if (this.instanteAtual == null) {
+			throw new RuntimeException("O instante atual é nulo");
+		}
+		if (this.instanteFinal != null && this.instanteAtual.isAfter(instanteFinal)) {
+			throw new RuntimeException("Instante atual é posterior ao final da simulação");
+		}
 
+		// atualizar posição elevadores
+		this.listaElevadores.forEach(e -> e.atualizar(this.instanteAtual));
+
+		// se o elevador estiver parado, verifica se há pessoas para desembarque
+
+		// pegar pessoas para processamento (instante atual = instante de
+		// chegada)
+
+		// para cada pessoa para o controlador decidirá qual elevador pegar
+
+		// se o elevador estiver em espera no andar minimo, verifica se há
+		// pessoas para embarque, se o elevador estiver no andar minimo mas o
+		// status for parado_subindo considera-se que o elevador não está mais
+		// disponível para embarque de pessoas na fila que acabaram de chegar
+
+		// condição: se lista de pessoas vazia, finalizar simulação
+		if (this.listaPessoasRestantes.isEmpty()) {
+			this.instanteFinal = this.instanteAtual;
+			return SimulacaoStatus.FINALIZADA;
+		} else {
+			return SimulacaoStatus.PROCESSANDO;
+		}
 	}
 
 	public Simulador() {
