@@ -205,6 +205,14 @@ public class Simulador {
 		this.listaElevadores = listaElevadores;
 	}
 
+	public ElevadorControle getElevadorControle() {
+		return elevadorControle;
+	}
+
+	public void setElevadorControle(ElevadorControle elevadorControle) {
+		this.elevadorControle = elevadorControle;
+	}
+
 	public Integer getQuantidadeElevadores() {
 		return quantidadeElevadores;
 	}
