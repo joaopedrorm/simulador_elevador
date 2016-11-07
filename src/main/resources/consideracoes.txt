@@ -2,3 +2,11 @@ Considerações:
  - Passo de simulação de 1s
  - Se o elevador estiver em espera no andar minimo a primeira pessoa que chegar sobe sozinha, ou seja o elevador não está mais disponível para embarque de pessoas que acabaram de chegar
  - Os elevadores descem automaticamente para o térreo idependentemente de haver pessoas em sua fila de espera
+ - Em vez de imprimir o resultado no console, optei por escrever no arquivo "saida.txt" por motivos de agilidade na simulação
+ - No programa há 3 simulações:
+   - Simulação com escolha sequencial, no qual cada elevador é escolhido pelo ciclo 1,2,3,4,1,2,3,4,1 ...
+   - Simulação com escolha aleatória do elevador
+   - Simulação com escolha do menor tempo calculado para cada elevador no momento que uma pessoa chega
+ - A otimização escolhida neste exercício é a por escolha do menor tempo calculado, apesar de não ser uma solução ótima, mostrou-se uma solução melhor que os outros dois casos.
+ 
+ - o arquivo config.properties foi usado durante testes, mas não é usado para a solução definitiva
