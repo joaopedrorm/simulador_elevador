@@ -9,7 +9,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.Lists;
+
 public class Elevador {
+
+	// private static final Logger logger =
+	// LoggerFactory.getLogger(Elevador.class);
+
 	private Integer identificacao;
 	private Integer andarAtual;
 	private Integer andarMinimo;
@@ -72,21 +78,26 @@ public class Elevador {
 
 	/**
 	 * retorna true se o periodo calculado é maior ou igual ao periodo
-	 * pre-definido
+	 * pre-definido, atualizando o marcador temporal para o instante atual se
+	 * true
 	 * 
 	 * @param instanteAtual
 	 * @param periodoComparacao
 	 * @return
 	 */
 	private Boolean periodoFinalizado(LocalDateTime instanteAtual, Duration periodoComparacao) {
-		return Duration.between(this.marcadorTemporal, instanteAtual).compareTo(periodoComparacao) >= 0;
+		Boolean finalizado = Duration.between(this.marcadorTemporal, instanteAtual).compareTo(periodoComparacao) >= 0;
+		if (finalizado) {
+			this.marcadorTemporal = LocalDateTime.from(instanteAtual);
+		}
+		return finalizado;
 	}
 
 	private void atualizarStatusSubindo() {
 		List<Integer> paradas = getParadasLotacao();
 		if (paradas.contains(this.andarAtual)) {
 			// o andar atual é uma parada programada
-			if (paradas.size() == 1) {
+			if (paradas.stream().distinct().count() == 1) {
 				// o andar atual é a última parada
 				this.status = ElevadorStatus.PARADO_DESCER;
 			} else {
@@ -125,10 +136,11 @@ public class Elevador {
 	 * @return
 	 */
 	private Duration calcularTempoRestanteUltimoAndarSubindo(LocalDateTime instanteAtual) {
-		// pegar lista de paradas restantes
+		// pegar lista de paradas, removendo andar atual se estiver presente
 		List<Integer> paradas = getParadasLotacao();
+		paradas.remove(this.andarAtual);
 		Integer ultimaParada = getUltimaParadaLotacao().orElse(andarAtual);
-		Duration tempoParado = periodoParada.multipliedBy(paradas.size());
+		Duration tempoParado = periodoParada.multipliedBy(paradas.stream().distinct().count());
 		Integer multiplicador = ultimaParada - andarAtual;
 		if (status == ElevadorStatus.SUBINDO) {
 			multiplicador -= 1;
@@ -198,7 +210,7 @@ public class Elevador {
 	 */
 	public List<Integer> getParadasLotacao() {
 		return lotacao.stream().filter(Objects::nonNull).map(p -> p.getAndar())
-				.filter(a -> a > this.andarAtual && a <= this.andarMaximo).collect(Collectors.toList());
+				.filter(a -> a >= this.andarAtual && a <= this.andarMaximo).collect(Collectors.toList());
 	}
 
 	/**
@@ -227,8 +239,34 @@ public class Elevador {
 	 * @return
 	 */
 	public List<Integer> getParadasFilaTerreo() {
-		return filaTerreo.stream().filter(Objects::nonNull).map(p -> p.getAndar())
-				.filter(a -> a > this.andarAtual && a <= this.andarMaximo).collect(Collectors.toList());
+		return filaTerreo.stream().filter(Objects::nonNull).map(p -> p.getAndar()).filter(a -> a <= this.andarMaximo)
+				.collect(Collectors.toList());
+	}
+
+	public Duration simularTempoFilaEspera(Pessoa p) {
+		List<Integer> listaParadas = getParadasFilaTerreo();
+		listaParadas.add(p.getAndar());
+		
+		List<Duration> temposEspera = new ArrayList<>();
+		for (List<Integer> particao : Lists.partition(listaParadas, this.lotacaoMaxima)) {
+			temposEspera.add((simularTempoSubida(particao)).plus(simularTempoDescida(particao)));
+		}
+		return temposEspera.stream().reduce(Duration::plus).orElse(Duration.ZERO);
+	}
+
+	private Duration simularTempoDescida(List<Integer> paradas) {
+		Integer ultimaParada = paradas.stream().max(Integer::compare).get();
+		Integer multiplicador = ultimaParada - this.andarMinimo;
+		return periodoEntreAndares.multipliedBy(multiplicador);
+	}
+
+	private Duration simularTempoSubida(List<Integer> paradas) {
+		// pegar lista de paradas, removendo andar atual se estiver presente
+		// cuidado get() pode soltar exception
+		Integer ultimaParada = paradas.stream().max(Integer::compare).get();
+		Duration tempoParado = periodoParada.multipliedBy(paradas.stream().distinct().count());
+		Integer multiplicador = ultimaParada - this.andarMinimo;
+		return periodoEntreAndares.multipliedBy(multiplicador).plus(tempoParado);
 	}
 
 	/**
@@ -242,7 +280,8 @@ public class Elevador {
 	 * @param marcadorTemporal
 	 */
 	public Elevador(Integer andarAtual, Integer andarMinimo, Integer andarMaximo, Integer lotacaoMaxima,
-			ElevadorStatus status, LocalDateTime marcadorTemporal) {
+			ElevadorStatus status, LocalDateTime marcadorTemporal, Duration periodoEntreAndares,
+			Duration periodoParada) {
 		super();
 		this.andarAtual = andarAtual;
 		this.andarMinimo = andarMinimo;
@@ -250,6 +289,8 @@ public class Elevador {
 		this.lotacaoMaxima = lotacaoMaxima;
 		this.status = status;
 		this.marcadorTemporal = marcadorTemporal;
+		this.periodoEntreAndares = periodoEntreAndares;
+		this.periodoParada = periodoParada;
 		this.lotacao = new ArrayList<>(this.lotacaoMaxima);
 		this.filaTerreo = new LinkedList<>();
 	}
@@ -340,6 +381,22 @@ public class Elevador {
 
 	public void setMarcadorTemporal(LocalDateTime marcadorTemporal) {
 		this.marcadorTemporal = marcadorTemporal;
+	}
+
+	public Duration getPeriodoEntreAndares() {
+		return periodoEntreAndares;
+	}
+
+	public void setPeriodoEntreAndares(Duration periodoEntreAndares) {
+		this.periodoEntreAndares = periodoEntreAndares;
+	}
+
+	public Duration getPeriodoParada() {
+		return periodoParada;
+	}
+
+	public void setPeriodoParada(Duration periodoParada) {
+		this.periodoParada = periodoParada;
 	}
 
 	@Override
