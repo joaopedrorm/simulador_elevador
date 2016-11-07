@@ -1,0 +1,4 @@
+Considerações:
+ - Passo de simulação de 1s
+ - Se o elevador estiver em espera no andar minimo a primeira pessoa que chegar sobe sozinha, ou seja o elevador não está mais disponível para embarque de pessoas que acabaram de chegar
+ - Os elevadores descem automaticamente para o térreo idependentemente de haver pessoas em sua fila de espera

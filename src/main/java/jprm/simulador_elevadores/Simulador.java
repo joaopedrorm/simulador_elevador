@@ -158,7 +158,7 @@ public class Simulador {
 			}
 		});
 
-		// condição: se lista de pessoas que ainda não desembarcaram vazia,
+		// condição: se lista de pessoas que ainda não desembarcaram estiver vazia,
 		// finalizar simulação
 		if (this.listaPessoas.stream().filter(p -> p.getInstanteDesembarque() == null).count() == 0) {
 			this.instanteFinal = LocalDateTime.from(this.instanteAtual);
