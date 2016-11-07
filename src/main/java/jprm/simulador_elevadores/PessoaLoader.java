@@ -1,7 +1,10 @@
 package jprm.simulador_elevadores;
 
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
@@ -50,15 +53,26 @@ public class PessoaLoader {
 	}
 
 	public List<Pessoa> getListaPessoas() {
-		return getListaPessoas(this.filename);
+		try (InputStream in = Files.newInputStream(Paths.get(this.filename))){
+		return getListaPessoas(in);
+		} catch (IOException e) {
+			logger.error(String.format("Erro ao carregar %s", this.filename), e);
+			return Collections.emptyList();
+		}
 	}
 
 	public List<Pessoa> getListaPessoasResource() {
-		return getListaPessoas(this.classLoader.getResource(this.filename).getPath());
+		try (InputStream in = this.classLoader.getResource(this.filename).openStream()){
+			return getListaPessoas(in);	
+		} catch (IOException e) {
+			logger.error(String.format("Erro ao carregar %s", this.filename), e);
+			return Collections.emptyList();
+		}
+		
 	}
 
-	private List<Pessoa> getListaPessoas(String filenamePath) {
-		return lerCSV(filenamePath).stream().filter(Objects::nonNull).filter(l -> l.size() >= 3).map(this::mapper)
+	private List<Pessoa> getListaPessoas(InputStream in) {
+		return lerCSV(in).stream().filter(Objects::nonNull).filter(l -> l.size() >= 3).map(this::mapper)
 				.collect(Collectors.toList());
 	}
 
@@ -70,8 +84,8 @@ public class PessoaLoader {
 		return new Pessoa(nome, andar, instante);
 	}
 
-	private List<List<String>> lerCSV(String filenamePath) {
-		try (ICsvListReader listReader = new CsvListReader(new FileReader(filenamePath),
+	private List<List<String>> lerCSV(InputStream in) {
+		try (ICsvListReader listReader = new CsvListReader(new InputStreamReader(in),
 				CsvPreference.STANDARD_PREFERENCE)) {
 
 			List<List<String>> listaLinhasCSV = new LinkedList<>();
