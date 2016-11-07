@@ -3,9 +3,11 @@ package jprm.simulador_elevadores;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -21,7 +23,7 @@ public class Simulador {
 	private LocalDateTime instanteInicial;
 	private LocalDateTime instanteAtual;
 	private LocalDateTime instanteFinal;
-	private List<Pessoa> listaPessoasRestantes;
+	private List<Pessoa> listaPessoas;
 	private List<Elevador> listaElevadores;
 	private ElevadorControle elevadorControle;
 
@@ -31,6 +33,7 @@ public class Simulador {
 	private Integer lotacaoMaximaElevador;
 	private Integer andarMinimoElevador;
 	private Integer andarMaximoElevador;
+	private Integer andarInicialElevador;
 
 	// assumindo 1s como maior unidade de tempo sem perda de eventos
 	private static final Long passoSimulacaoSegundosDefault = 1l;
@@ -57,12 +60,15 @@ public class Simulador {
 	// andar máximo = 25 andar
 	private static final Integer andarMaximoElevadorDefault = 25;
 
+	// andar inicial = 1 andar
+	private static final Integer andarInicialElevadorDefault = 1;
+
 	public void inicializar(List<Pessoa> pessoas) {
 		if (pessoas.isEmpty()) {
 			throw new RuntimeException("A lista de pessoas para simulação está vazia");
 		}
 
-		this.listaPessoasRestantes = pessoas;
+		this.listaPessoas = pessoas;
 
 		Optional<LocalDateTime> instanteInicialOpt = pessoas.stream().filter(Objects::nonNull)
 				.map(Pessoa::getInstanteChegada).min(LocalDateTime::compareTo);
@@ -72,21 +78,23 @@ public class Simulador {
 				.orElseThrow(() -> new RuntimeException("Não foi possível obter o instante inicial para a simulação"));
 
 		// LocalDateTime é imutável
-		this.instanteAtual = this.instanteInicial;
+		this.instanteAtual = LocalDateTime.from(this.instanteInicial);
 
 		// incializar elevadores
 		this.listaElevadores = new ArrayList<Elevador>(this.quantidadeElevadores);
 		for (int i = 0; i < this.quantidadeElevadores; i++) {
 			Elevador e = new Elevador(this.lotacaoMaximaElevador);
-			e.setAndarAtual(this.andarMinimoElevador);
+			e.setAndarAtual(this.andarInicialElevador);
 			e.setAndarMaximo(this.andarMaximoElevador);
 			e.setAndarMinimo(this.andarMinimoElevador);
 			e.setIdentificacao(i + 1);
 			e.setMarcadorTemporal(this.instanteAtual);
+			e.setPeriodoEntreAndares(this.periodoEntreAndaresElevador);
+			e.setPeriodoParada(this.periodoParadaElevador);
 			e.setStatus(ElevadorStatus.ESPERA_TERREO);
 			this.listaElevadores.add(e);
 		}
-		
+
 		this.elevadorControle.inicializar(this.listaElevadores);
 	}
 
@@ -107,22 +115,25 @@ public class Simulador {
 
 		// se o elevador estiver parado, verifica se há pessoas para desembarque
 		for (Elevador e : this.listaElevadores) {
-			e.getLotacao().stream().filter(p -> p.getAndar() == e.getAndarAtual()).forEach(p -> {
-				p.setInstanteDembarque(this.instanteAtual);
-				e.getLotacao().remove(p);
-				registrarDesembarque(p);
-			});
+			if (e.getStatus() == ElevadorStatus.PARADO_SUBIR || e.getStatus() == ElevadorStatus.PARADO_DESCER) {
+				List<Pessoa> lotacao = e.getLotacao().stream().filter(p -> p.getAndar() == e.getAndarAtual())
+						.collect(Collectors.toList());
+				e.getLotacao().removeAll(lotacao);
+				lotacao.forEach(p -> {
+					p.setInstanteDesembarque(this.instanteAtual);
+					registrarDesembarque(p, e);
+				});
+			}
 		}
 
 		// pegar pessoas para processamento (instante atual = instante de
 		// chegada)
-		List<Pessoa> pessoasChegaram = this.listaPessoasRestantes.stream()
+		List<Pessoa> pessoasChegaram = this.listaPessoas.stream()
 				.filter(p -> p.getInstanteChegada().isEqual(this.instanteAtual)).collect(Collectors.toList());
 
-		this.listaPessoasRestantes.removeAll(pessoasChegaram);
-
-		// para cada pessoa para o controlador decidirá qual elevador pegar
-		pessoasChegaram.forEach(p -> this.elevadorControle.decisao(p).getFilaTerreo().add(p));
+		// para cada pessoa para o controlador decidirá qual elevador pegar, e
+		// adiciona a pessoa no final da lista da fila do terreo
+		pessoasChegaram.forEach(p -> this.elevadorControle.decisao(p, instanteAtual).getFilaTerreo().add(p));
 
 		// se o elevador estiver em espera no andar minimo, verifica se há
 		// pessoas para embarque, se o elevador estiver no andar minimo mas o
@@ -134,25 +145,96 @@ public class Simulador {
 				e.setStatus(ElevadorStatus.PARADO_SUBIR);
 			}
 			List<Pessoa> lotacao = e.getLotacao();
-			for (Pessoa p : pessoasFila) {
-				if (lotacao.size() <= this.getLotacaoMaximaElevador()) {
+			// usando iterator para evitar problemas de concorrencia na chamada
+			// array.remove(obj)
+			Iterator<Pessoa> it = pessoasFila.iterator();
+			while (it.hasNext()) {
+				Pessoa p = it.next();
+				if (lotacao.size() < this.getLotacaoMaximaElevador()) {
 					lotacao.add(p);
-					pessoasFila.remove(p);
+					it.remove();
+					p.setInstanteEmbarque(instanteAtual);
 				}
 			}
 		});
 
-		// condição: se lista de pessoas vazia, finalizar simulação
-		if (this.listaPessoasRestantes.isEmpty()) {
-			this.instanteFinal = this.instanteAtual;
+		// condição: se lista de pessoas que ainda não desembarcaram vazia,
+		// finalizar simulação
+		if (this.listaPessoas.stream().filter(p -> p.getInstanteDesembarque() == null).count() == 0) {
+			this.instanteFinal = LocalDateTime.from(this.instanteAtual);
 			return SimulacaoStatus.FINALIZADA;
 		} else {
 			return SimulacaoStatus.PROCESSANDO;
 		}
 	}
 
-	public void registrarDesembarque(Pessoa p) {
-		logger.info(String.format("%s %n Elevadores: %s", p, this.listaElevadores));
+	public void registrarDesembarque(Pessoa p, Elevador e) {
+		logger.info(String.format("%n %n --> Desembarque: Elevador %d %s %n --> Elevadores: %s %n",
+				e.getIdentificacao(), p, imprimeElevadores()));
+	}
+
+	private String imprimeElevadores() {
+		String retorno = "";
+		for (Elevador e : this.listaElevadores) {
+			String lotacao = e.getLotacao().size()
+					+ e.getLotacao().stream().map(p -> String.format("%s -> %d andar", p.getNome(), p.getAndar()))
+							.collect(Collectors.joining(",", "[", "]"));
+			retorno += String.format("%n Elevador %d: andarAtual=%d, status=%s, lotacao=%s", e.getIdentificacao(),
+					e.getAndarAtual(), e.getStatus(), lotacao);
+		}
+		return retorno;
+	}
+
+	public void imprimeEstatisticasSimulacao() {
+		// calcula tempo médio de espera na fila
+		List<Duration> listaTempoEsperaFila = obterListaTempo(p -> p.calculaTempoEsperaFila());
+
+		Optional<Duration> maiorTempoEsperaFilaOpt = listaTempoEsperaFila.stream().max(Duration::compareTo);
+
+		Optional<Duration> tempoMedioEsperaFilaOpt = calculaTempoMedio(listaTempoEsperaFila);
+
+		// verifica pessoas que não embarcaram
+		String pessoasNaoEmbarcaram = String.format("Quantidade de pessoas que não embarcaram=%d",
+				this.listaPessoas.size() - listaTempoEsperaFila.size());
+
+		// calcula tempo médio do embarque até desembarque (Chegada até o andar)
+		List<Duration> listaTempoChegadaAndar = obterListaTempo(p -> p.calculaTempoChegadaAndar());
+
+		Optional<Duration> maiorTempoCheagadaAndarOpt = listaTempoChegadaAndar.stream().max(Duration::compareTo);
+
+		Optional<Duration> tempoMedioChegadaAndarOpt = calculaTempoMedio(listaTempoChegadaAndar);
+
+		// verifica pessoas que não desembarcaram
+		String pessoasNaoDesembarcaram = String.format("Quantidade de pessoas que não embarcaram=%d",
+				this.listaPessoas.size() - listaTempoChegadaAndar.size());
+
+		// calcula tempo médio total de percurso
+		List<Duration> listaTempoTotalPercurso = obterListaTempo(p -> p.calculaTempoTotalPercurso());
+
+		Optional<Duration> maiorTempoTotalPercursoOpt = listaTempoTotalPercurso.stream().max(Duration::compareTo);
+
+		Optional<Duration> tempoMedioTotalPercursoOpt = calculaTempoMedio(listaTempoTotalPercurso);
+
+		// Mensagem
+		String mensagem = "%n %n Estatísticas da Simulação: %s %n Tempo médio de espera na fila = %s "
+				+ "%n Tempo médio entre embarque e desembarque do elevador = %s "
+				+ "%n Tempo médio total de percurso = %s " + "%n Maior Tempo de espera = %s "
+				+ "%n Maior Tempo entre Embarque e Desembarque = %s " + "%n Maior tempo total de percurso = %s "
+				+ "%n %s %n %s %n";
+
+		logger.info(String.format(mensagem, this.elevadorControle.getNome(), tempoMedioEsperaFilaOpt,
+				tempoMedioChegadaAndarOpt, tempoMedioTotalPercursoOpt, maiorTempoEsperaFilaOpt,
+				maiorTempoCheagadaAndarOpt, maiorTempoTotalPercursoOpt, pessoasNaoEmbarcaram, pessoasNaoDesembarcaram));
+
+	}
+
+	private Optional<Duration> calculaTempoMedio(List<Duration> l) {
+		return l.stream().reduce(Duration::plus).map(d -> d.dividedBy(l.size()));
+	}
+
+	private List<Duration> obterListaTempo(Function<? super Pessoa, ? extends Optional<Duration>> mapper) {
+		return this.listaPessoas.stream().map(mapper).filter(Optional::isPresent).map(Optional::get)
+				.collect(Collectors.toList());
 	}
 
 	public Simulador(ElevadorControle elevadorControle) {
@@ -162,6 +244,7 @@ public class Simulador {
 		this.lotacaoMaximaElevador = lotacaoMaximaElevadorDefault;
 		this.andarMinimoElevador = andarMinimoElevadorDefault;
 		this.andarMaximoElevador = andarMaximoElevadorDefault;
+		this.andarInicialElevador = andarInicialElevadorDefault;
 		this.elevadorControle = elevadorControle;
 	}
 
@@ -189,12 +272,12 @@ public class Simulador {
 		this.instanteFinal = instanteFinal;
 	}
 
-	public List<Pessoa> getListaPessoasRestantes() {
-		return listaPessoasRestantes;
+	public List<Pessoa> getListaPessoas() {
+		return listaPessoas;
 	}
 
-	public void setListaPessoasRestantes(List<Pessoa> listaPessoasRestantes) {
-		this.listaPessoasRestantes = listaPessoasRestantes;
+	public void setListaPessoas(List<Pessoa> listaPessoas) {
+		this.listaPessoas = listaPessoas;
 	}
 
 	public List<Elevador> getListaElevadores() {
@@ -259,6 +342,14 @@ public class Simulador {
 
 	public void setAndarMaximoElevador(Integer andarMaximoElevador) {
 		this.andarMaximoElevador = andarMaximoElevador;
+	}
+
+	public Integer getAndarInicialElevador() {
+		return andarInicialElevador;
+	}
+
+	public void setAndarInicialElevador(Integer andarInicialElevador) {
+		this.andarInicialElevador = andarInicialElevador;
 	}
 
 	@Override
