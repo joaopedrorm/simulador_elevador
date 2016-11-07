@@ -1,6 +1,8 @@
 package jprm.simulador_elevadores;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 public class Pessoa {
 
@@ -8,7 +10,27 @@ public class Pessoa {
 	private Integer andar;
 	private LocalDateTime instanteChegada;
 	private LocalDateTime instanteEmbarque;
-	private LocalDateTime instanteDembarque;
+	private LocalDateTime instanteDesembarque;
+
+	public Optional<Duration> calculaTempoEsperaFila() {
+		if (this.instanteEmbarque == null) {
+			return Optional.empty();
+		} else {
+			return Optional.of(Duration.between(this.instanteChegada, this.instanteEmbarque));
+		}
+	}
+
+	public Optional<Duration> calculaTempoChegadaAndar() {
+		if (this.instanteEmbarque == null || this.instanteDesembarque == null) {
+			return Optional.empty();
+		} else {
+			return Optional.of(Duration.between(this.instanteEmbarque, this.instanteDesembarque));
+		}
+	}
+
+	public Optional<Duration> calculaTempoTotalPercurso() {
+		return calculaTempoEsperaFila().flatMap(tef -> calculaTempoChegadaAndar().map(tca -> tca.plus(tef)));
+	}
 
 	public Pessoa(String nome, Integer andar, LocalDateTime instanteChegada) {
 		super();
@@ -49,12 +71,12 @@ public class Pessoa {
 		this.instanteEmbarque = instanteEmbarque;
 	}
 
-	public LocalDateTime getInstanteDembarque() {
-		return instanteDembarque;
+	public LocalDateTime getInstanteDesembarque() {
+		return instanteDesembarque;
 	}
 
-	public void setInstanteDembarque(LocalDateTime instanteDembarque) {
-		this.instanteDembarque = instanteDembarque;
+	public void setInstanteDesembarque(LocalDateTime instanteDesembarque) {
+		this.instanteDesembarque = instanteDesembarque;
 	}
 
 	@Override
@@ -63,7 +85,7 @@ public class Pessoa {
 		int result = 1;
 		result = prime * result + ((andar == null) ? 0 : andar.hashCode());
 		result = prime * result + ((instanteChegada == null) ? 0 : instanteChegada.hashCode());
-		result = prime * result + ((instanteDembarque == null) ? 0 : instanteDembarque.hashCode());
+		result = prime * result + ((instanteDesembarque == null) ? 0 : instanteDesembarque.hashCode());
 		result = prime * result + ((instanteEmbarque == null) ? 0 : instanteEmbarque.hashCode());
 		result = prime * result + ((nome == null) ? 0 : nome.hashCode());
 		return result;
@@ -88,10 +110,10 @@ public class Pessoa {
 				return false;
 		} else if (!instanteChegada.equals(other.instanteChegada))
 			return false;
-		if (instanteDembarque == null) {
-			if (other.instanteDembarque != null)
+		if (instanteDesembarque == null) {
+			if (other.instanteDesembarque != null)
 				return false;
-		} else if (!instanteDembarque.equals(other.instanteDembarque))
+		} else if (!instanteDesembarque.equals(other.instanteDesembarque))
 			return false;
 		if (instanteEmbarque == null) {
 			if (other.instanteEmbarque != null)
@@ -109,7 +131,9 @@ public class Pessoa {
 	@Override
 	public String toString() {
 		return "\n Pessoa [nome=" + nome + ", andar=" + andar + ", instanteChegada=" + instanteChegada
-				+ ", instanteEmbarque=" + instanteEmbarque + ", instanteDembarque=" + instanteDembarque + "]";
+				+ ", instanteEmbarque=" + instanteEmbarque + ", instanteDesembarque=" + instanteDesembarque
+				+ ", tempoEsperaFila=" + calculaTempoEsperaFila() + ", tempoChegadaAndar=" + calculaTempoChegadaAndar()
+				+ ", tempoTotalPercurso=" + calculaTempoTotalPercurso() + "]";
 	}
 
 }
